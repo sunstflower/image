@@ -1,0 +1,56 @@
+# Rust
+/target
+Cargo.lock
+*.pdb
+
+# WebAssembly 构建输出
+rustimage-wasm/pkg/
+frontend/public/wasm/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React/Vite 构建输出
+frontend/dist/
+frontend/build/
+
+# 日志文件
+*.log
+
+# 环境变量
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE/编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp
+
+# 基准测试结果
+criterion/
+bench_results/
+
+# 性能分析文件
+*.prof
+perf.data*

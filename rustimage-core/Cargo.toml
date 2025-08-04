@@ -1,0 +1,26 @@
+[package]
+name = "rustimage-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core image processing library with deep module design"
+
+[dependencies]
+image = { workspace = true }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[lib]
+name = "rustimage_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false
+required-features = ["bench"]
+
+[features]
+default = []
+bench = []
+simd = []
+parallel = ["rayon"]
