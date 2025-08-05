@@ -25,7 +25,11 @@ pub fn convert_format(  // 格式转换接口
     to_format: ImageFormat,   // 目标格式
     options: Option<ConversionOptions>, // 转换选项
 ) -> Result<ConvertedImage> {
-    todo!("Implementation will be added later") // 实现将添加到以后
+    // 使用默认配置创建转换器
+    let mut converter = FormatConverter::with_defaults()?;
+    
+    // 执行转换
+    converter.convert_format(image_data, from_format, to_format, options)
 }
 
 /// 批量格式转换接口 - 展示并行处理能力
@@ -33,20 +37,30 @@ pub fn batch_convert(
     images: Vec<ImageInput>, // 图像输入
     conversion_tasks: Vec<ConversionTask>, // 转换任务
 ) -> Result<Vec<ConvertedImage>> {
-    todo!("Implementation will be added later")
+    // 使用高性能配置创建转换器
+    let mut converter = FormatConverter::with_high_performance()?;
+    
+    // 执行批量转换
+    converter.batch_convert(images, conversion_tasks)
 }
 
 /// 格式检测接口 - 自动识别图像格式
 pub fn detect_format(image_data: &[u8]) -> Result<ImageFormat> {
-    todo!("Implementation will be added later")
+    // 使用格式检测器
+    crate::codecs::FormatDetector::detect(image_data)
 }
 
 /// 获取格式信息 - 了解格式特性
 pub fn get_format_info(format: ImageFormat) -> FormatInfo {
-    todo!("Implementation will be added later")
+    // 使用格式的内置信息方法
+    format.info()
 }
 
 /// 获取性能指标 - 用于展示 Rust 性能优势
 pub fn get_performance_metrics() -> PerformanceMetrics {
-    todo!("Implementation will be added later")
+    // 创建临时监控器获取当前指标
+    match crate::performance::PerformanceMonitor::new(true) {
+        Ok(monitor) => monitor.get_current_metrics(),
+        Err(_) => PerformanceMetrics::default(),
+    }
 }

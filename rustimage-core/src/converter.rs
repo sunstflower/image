@@ -140,21 +140,22 @@ impl FormatConverter {
     /// 创建新的格式转换器 - 主要构造函数
     pub fn new(config: ConverterConfig) -> Result<Self> {
         // 1. 创建编解码引擎配置
-        let codec_config = CodecConfigBuilder::new()
+        let mut codec_config_builder = CodecConfigBuilder::new()
             .parallel(config.enable_parallel)
-            .simd(config.enable_simd)
-            .build();
+            .simd(config.enable_simd);
         
         if let Some(size) = config.thread_pool_size {
-            codec_config.thread_pool_size(size);
+            codec_config_builder = codec_config_builder.thread_pool_size(size);
         }
         
         if let Some(limit) = config.memory_limit {
-            codec_config.memory_limit(limit);
+            codec_config_builder = codec_config_builder.memory_limit(limit);
         }
         
+        let codec_config = codec_config_builder.build();
+        
         // 2. 创建编解码引擎
-        let codec_engine = CodecEngine::new(codec_config.build())?;
+        let codec_engine = CodecEngine::new(codec_config)?;
         
         // 3. 创建性能监控器
         let performance_monitor = PerformanceMonitor::new(
@@ -175,6 +176,32 @@ impl FormatConverter {
     /// 使用默认配置创建转换器
     pub fn with_defaults() -> Result<Self> {
         Self::new(ConverterConfig::default())
+    }
+    
+    /// 使用高性能配置创建转换器
+    pub fn with_high_performance() -> Result<Self> {
+        let config = ConverterConfigBuilder::new()
+            .enable_parallel(true)
+            .enable_simd(true)
+            .thread_pool_size(num_cpus_get())
+            .enable_performance_monitoring(true)
+            .quality_strategy(QualityStrategy::Balanced)
+            .batch_size(64)
+            .build();
+        
+        Self::new(config)
+    }
+    
+    /// 使用高质量配置创建转换器
+    pub fn with_high_quality() -> Result<Self> {
+        let config = ConverterConfigBuilder::new()
+            .enable_parallel(false) // 质量优先，禁用并行避免竞争
+            .enable_simd(true)
+            .enable_quality_assessment(true)
+            .quality_strategy(QualityStrategy::MaxQuality)
+            .build();
+        
+        Self::new(config)
     }
     
     /// 转换图像格式 - 深模块的主要接口
