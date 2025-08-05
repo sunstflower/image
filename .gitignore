@@ -54,3 +54,7 @@ bench_results/
 # 性能分析文件
 *.prof
 perf.data*
+
+# Cursor
+/.cursor/
+*.md
