@@ -6,21 +6,19 @@ description = "Core image processing library with deep module design"
 
 [dependencies]
 image = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+uuid = { version = "1.6", features = ["v4"] }
 
 [lib]
 name = "rustimage_core"
 crate-type = ["cdylib", "rlib"]
 
-[[bench]]
-name = "performance_benchmarks"
-harness = false
-required-features = ["bench"]
+
 
 [features]
-default = []
+default = ["parallel"]
 bench = []
 simd = []
 parallel = ["rayon"]

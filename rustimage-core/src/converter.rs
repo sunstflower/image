@@ -9,12 +9,20 @@
 use crate::{
     error::{ImageError, Result},
     types::*,
-    codecs::{CodecEngine, CodecConfig, CodecConfigBuilder},
+    codecs::{CodecEngine, CodecConfigBuilder},
     performance::PerformanceMonitor,
 };
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
+
+// 外部依赖的简化实现
+fn num_cpus_get() -> usize {
+    // 简化实现，实际项目中应该使用 num_cpus crate
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
 
 // =============================================================================
 // 公共API - 深模块的极简接口
@@ -341,30 +349,45 @@ impl FormatConverter {
         image_data: &[u8],
         context: &ConversionContext,
     ) -> Result<ConvertedImage> {
-        // 1. 解码输入图像
-        let image_buffer = self.codec_engine.decode::<Rgba8>(image_data, context.from_format)?;
+        let start_time = Instant::now();
         
-        // 2. 编码为目标格式
-        let output_data = self.codec_engine.encode(
-            &image_buffer,
-            context.to_format,
-            &context.options,
-        )?;
+        // 开始性能监控
+        if context.enable_monitoring {
+            self.performance_monitor.start_conversion(&context.from_format, &context.to_format);
+        }
         
-        // 3. 计算指标
-        let conversion_time_ms = context.start_time.elapsed().as_secs_f64() * 1000.0;
-        let compression_ratio = output_data.len() as f32 / context.input_size as f32;
+        let result = (|| -> Result<ConvertedImage> {
+            // 1. 解码输入图像
+            let image_buffer = self.codec_engine.decode::<Rgba8>(image_data, context.from_format)?;
+            
+            // 2. 编码为目标格式
+            let output_data = self.codec_engine.encode(
+                &image_buffer,
+                context.to_format,
+                &context.options,
+            )?;
+            
+            // 3. 计算指标
+            let conversion_time_ms = context.start_time.elapsed().as_secs_f64() * 1000.0;
+            
+            // 4. 构建结果
+            Ok(ConvertedImage::new(
+                output_data,
+                image_buffer.dimensions(),
+                context.to_format,
+                conversion_time_ms,
+                context.input_size,
+            ))
+        })();
         
-        // 4. 构建结果
-        Ok(ConvertedImage::new(
-            output_data,
-            image_buffer.dimensions(),
-            context.to_format,
-            conversion_time_ms,
-            context.input_size,
-            compression_ratio,
-            None, // quality_metrics - TODO: 实现质量评估
-        ))
+        // 结束性能监控
+        if context.enable_monitoring {
+            let duration = start_time.elapsed();
+            let success = result.is_ok();
+            self.performance_monitor.end_conversion(duration, success);
+        }
+        
+        result
     }
     
     /// 执行并行批处理

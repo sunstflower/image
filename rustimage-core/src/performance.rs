@@ -677,13 +677,13 @@ impl Default for MonitorConfig {
 }
 
 impl MonitorConfig {
-    /// 创建禁用监控的配置
+    /// 创建禁用的监控配置
     pub fn disabled() -> Self {
         Self {
             enabled: false,
             enable_detailed_monitoring: false,
             max_history_entries: 0,
-            sampling_interval_ms: 1000,
+            sampling_interval_ms: 0,
             monitor_memory: false,
             monitor_cpu: false,
         }

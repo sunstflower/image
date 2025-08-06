@@ -7,7 +7,7 @@
 //! - **零成本抽象**：编译时错误转换优化
 
 use thiserror::Error;
-use std::fmt;
+use std::error::Error;
 
 // =============================================================================
 // 公共错误API - 深模块的统一错误接口
@@ -190,7 +190,7 @@ pub enum ImageError {
     // =========================================================================
     
     /// 批处理失败
-    #[error("Batch processing failed: {successful_count}/{total_count} successful")]
+    #[error("Batch processing failed: {successful_count} successful")]
     BatchProcessingFailed {
         /// 成功处理的数量
         successful_count: usize,
@@ -285,7 +285,7 @@ pub type Result<T> = std::result::Result<T, ImageError>;
 // =============================================================================
 
 /// 错误严重程度 - 用于错误分类和处理策略
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ErrorSeverity {
     /// 低级别：可以恢复的错误
     Low,

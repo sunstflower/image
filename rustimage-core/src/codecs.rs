@@ -10,7 +10,7 @@ use crate::{
     error::{ImageError, Result},
     types::*,
 };
-use rayon::prelude::*;
+
 use std::sync::Arc;
 
 // =============================================================================
