@@ -8,6 +8,8 @@ description = "WebAssembly bindings for rustimage-core"
 rustimage-core = { path = "../rustimage-core" }
 wasm-bindgen = { workspace = true }
 serde = { workspace = true }
+serde_json = "1.0"
+compile-time = "0.2"
 serde-wasm-bindgen = "0.6"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
@@ -19,9 +21,14 @@ web-sys = { version = "0.3", features = [
     "PerformanceEntry",
     "PerformanceMeasure",
     "PerformanceObserver",
+    "Window",
+    "Navigator",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
 ] }
 wee_alloc = { version = "0.4", optional = true }
-console_error_panic_hook = "0.1"
+console_error_panic_hook = { version = "0.1", optional = true }
 
 [lib]
 crate-type = ["cdylib"]
