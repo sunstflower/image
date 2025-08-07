@@ -12,18 +12,20 @@ use crate::{
 };
 
 use std::sync::Arc;
+use std::io::Cursor;
+use image::{ImageFormat as ImageCrateFormat, ImageEncoder};
 
 // =============================================================================
 // 公共API - 深模块的简单接口
 // =============================================================================
 
 /// 编解码引擎 - 对外的统一入口点
-/// 
+///
 /// 这是一个"深模块"：提供简单的encode/decode接口，
 /// 内部管理8种不同格式的复杂编解码器
 pub struct CodecEngine {
     // 私有字段：隐藏所有实现细节
-    codecs: CodecRegistry, // 管理所有编解码器实例    
+    codecs: CodecRegistry, // 管理所有编解码器实例
     config: CodecConfig, // 编解码器配置
 }
 
@@ -34,7 +36,7 @@ pub struct CodecConfig {
     pub parallel_enabled: bool,
     /// 线程池大小
     pub thread_pool_size: Option<usize>,
-    /// 是否启用SIMD优化  
+    /// 是否启用SIMD优化
     pub simd_enabled: bool,
     /// 内存限制（字节）
     pub memory_limit: Option<u64>,
@@ -116,46 +118,46 @@ struct CodecRegistry {
 // =============================================================================
 
 /// 编解码器特征 - 统一的编解码接口
-/// 
+///
 /// 使用泛型和关联类型实现零成本抽象
 pub trait Codec<P: Pixel>: Send + Sync {
     /// 解码图像数据
-    /// 
+    ///
     /// # 参数
     /// - `data`: 原始图像数据
-    /// 
+    ///
     /// # 返回
     /// - `Ok(ImageBuffer)`: 解码成功的像素缓冲区
     /// - `Err(ImageError)`: 解码失败的错误信息
     fn decode(&self, data: &[u8]) -> Result<ImageBuffer<P>>;
-    
+
     /// 编码图像数据
-    /// 
+    ///
     /// # 参数
     /// - `buffer`: 像素缓冲区
     /// - `options`: 编码选项
-    /// 
+    ///
     /// # 返回
     /// - `Ok(Vec<u8>)`: 编码后的图像数据
     /// - `Err(ImageError)`: 编码失败的错误信息
     fn encode(&self, buffer: &ImageBuffer<P>, options: &ConversionOptions) -> Result<Vec<u8>>;
-    
+
     /// 获取编解码器信息
     fn info(&self) -> CodecInfo;
-    
+
     /// 验证数据格式
     fn validate_format(&self, data: &[u8]) -> bool;
-    
+
     /// 获取默认编码选项
     fn default_options(&self) -> ConversionOptions {
         ConversionOptionsBuilder::new().build()
     }
-    
+
     /// 预处理 - 可选的性能优化
     fn preprocess(&mut self, _dimensions: ImageDimensions) -> Result<()> {
         Ok(())
     }
-    
+
     /// 后处理 - 资源清理
     fn postprocess(&mut self) -> Result<()> {
         Ok(())
@@ -387,29 +389,29 @@ struct IcoCodec {
 
 impl CodecEngine {
     /// 创建新的编解码引擎 - 主要构造函数
-    /// 
+    ///
     /// # 参数
     /// - `config`: 编解码器配置
-    /// 
+    ///
     /// # 返回
     /// - `Ok(CodecEngine)`: 创建成功的引擎实例
     /// - `Err(ImageError)`: 创建失败的错误信息
     pub fn new(config: CodecConfig) -> Result<Self> {
         let codecs = CodecRegistry::new(&config)?;
-        
+
         Ok(Self {
             codecs,
             config,
         })
     }
-    
+
     /// 使用默认配置创建引擎
     pub fn with_defaults() -> Result<Self> {
         Self::new(CodecConfig::default())
     }
-    
+
     /// 解码图像数据 - 深模块的主要接口
-    /// 
+    ///
     /// 这个简单的接口隐藏了复杂的格式检测、编解码器选择、
     /// 并行处理、错误恢复等逻辑
     pub fn decode<P: Pixel>(&self, data: &[u8], format: ImageFormat) -> Result<ImageBuffer<P>>
@@ -418,17 +420,17 @@ impl CodecEngine {
     {
         // 1. 格式验证 - 内部逻辑
         self.validate_format_data(data, format)?;
-        
+
         // 2. 获取对应的编解码器 - 信息隐藏
         let codec = self.codecs.get_codec(format)?;
-        
+
         // 3. 执行解码 - 委托给具体实现
         let rgba_buffer = codec.decode(data)?;
-        
+
         // 4. 像素格式转换 - 零成本抽象
         self.convert_buffer::<Rgba8, P>(rgba_buffer)
     }
-    
+
     /// 编码图像数据 - 深模块的主要接口
     pub fn encode<P: Pixel>(
         &self,
@@ -441,20 +443,20 @@ impl CodecEngine {
     {
         // 1. 参数验证 - 内部逻辑
         self.validate_encode_params(format, options)?;
-        
+
         // 2. 像素格式转换 - 零成本抽象
         let rgba_buffer = self.convert_buffer::<P, Rgba8>(buffer.clone())?;
-        
+
         // 3. 获取编解码器并编码 - 委托给具体实现
         let codec = self.codecs.get_codec(format)?;
         codec.encode(&rgba_buffer, options)
     }
-    
+
     /// 检测图像格式 - 便民方法
     pub fn detect_format(&self, data: &[u8]) -> Result<ImageFormat> {
         FormatDetector::detect(data)
     }
-    
+
     /// 获取支持的格式列表
     pub fn supported_formats(&self) -> Vec<ImageFormat> {
         vec![
@@ -468,18 +470,18 @@ impl CodecEngine {
             ImageFormat::Ico,
         ]
     }
-    
+
     /// 检查格式转换是否支持
     pub fn supports_conversion(&self, from: ImageFormat, to: ImageFormat) -> bool {
         self.supported_formats().contains(&from) && self.supported_formats().contains(&to)
     }
-    
+
     /// 获取编解码器信息
     pub fn get_codec_info(&self, format: ImageFormat) -> Result<CodecInfo> {
         let codec = self.codecs.get_codec(format)?;
         Ok(codec.info())
     }
-    
+
     /// 更新配置 - 运行时重配置
     pub fn update_config(&mut self, config: CodecConfig) -> Result<()> {
         // 重新创建编解码器注册表
@@ -501,21 +503,21 @@ impl CodecEngine {
                 format: format!("Empty data for format {}", format),
             });
         }
-        
+
         let codec = self.codecs.get_codec(format)?;
         if !codec.validate_format(data) {
             return Err(ImageError::InvalidFormat {
                 format: format!("Data does not match format {}", format),
             });
         }
-        
+
         Ok(())
     }
-    
+
     /// 验证编码参数 - 私有方法
     fn validate_encode_params(&self, format: ImageFormat, options: &ConversionOptions) -> Result<()> {
         let info = format.info();
-        
+
         // 检查有损格式的质量参数
         if info.capabilities.supports_lossy() {
             if let Some(quality) = options.quality() {
@@ -526,7 +528,7 @@ impl CodecEngine {
                 }
             }
         }
-        
+
         // 检查无损格式的压缩级别
         if !info.capabilities.supports_lossy() {
             if let Some(level) = options.compression_level() {
@@ -537,10 +539,10 @@ impl CodecEngine {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// 像素格式转换 - 零成本抽象的私有实现
     fn convert_buffer<From, To>(&self, buffer: ImageBuffer<From>) -> Result<ImageBuffer<To>>
     where
@@ -551,14 +553,14 @@ impl CodecEngine {
             .into_iter()
             .map(|pixel| pixel.into())
             .collect();
-        
+
         Ok(ImageBuffer {
             pixels: converted_pixels,
             dimensions: buffer.dimensions,
             pixel_format: self.infer_pixel_format::<To>(),
         })
     }
-    
+
     /// 推断像素格式 - 编译时特化
     fn infer_pixel_format<P: Pixel>(&self) -> PixelFormat {
         match (P::CHANNEL_COUNT, P::BITS_PER_CHANNEL, P::HAS_ALPHA) {
@@ -591,7 +593,7 @@ impl CodecRegistry {
             ico: Box::new(IcoCodec::new(config)?),
         })
     }
-    
+
     /// 获取指定格式的编解码器 - 私有方法
     fn get_codec(&self, format: ImageFormat) -> Result<&dyn Codec<Rgba8>> {
         let codec: &dyn Codec<Rgba8> = match format {
@@ -617,14 +619,14 @@ impl<P: Pixel> ImageBuffer<P> {
     pub fn new(width: u32, height: u32, pixel_format: PixelFormat) -> Self {
         let capacity = (width * height) as usize;
         let pixels = Vec::with_capacity(capacity);
-        
+
         Self {
             pixels,
             dimensions: ImageDimensions { width, height },
             pixel_format,
         }
     }
-    
+
     /// 从原始数据创建缓冲区
     pub fn from_raw(
         width: u32,
@@ -641,25 +643,25 @@ impl<P: Pixel> ImageBuffer<P> {
                 ),
             });
         }
-        
+
         Ok(Self {
             pixels: data,
             dimensions: ImageDimensions { width, height },
             pixel_format,
         })
     }
-    
+
     /// 获取像素 - 边界检查的安全访问
     #[inline]
     pub fn get_pixel(&self, x: u32, y: u32) -> Option<&P> {
         if x >= self.dimensions.width || y >= self.dimensions.height {
             return None;
         }
-        
+
         let index = (y * self.dimensions.width + x) as usize;
         self.pixels.get(index)
     }
-    
+
     /// 设置像素 - 边界检查的安全修改
     #[inline]
     pub fn put_pixel(&mut self, x: u32, y: u32, pixel: P) -> Result<()> {
@@ -668,7 +670,7 @@ impl<P: Pixel> ImageBuffer<P> {
                 details: format!("Pixel coordinates ({}, {}) out of bounds", x, y),
             });
         }
-        
+
         let index = (y * self.dimensions.width + x) as usize;
         if index < self.pixels.len() {
             self.pixels[index] = pixel;
@@ -679,15 +681,15 @@ impl<P: Pixel> ImageBuffer<P> {
             })
         }
     }
-    
+
     // 只读访问器方法
     pub fn dimensions(&self) -> ImageDimensions { self.dimensions }
     pub fn pixel_format(&self) -> PixelFormat { self.pixel_format }
     pub fn as_slice(&self) -> &[P] { &self.pixels }
     pub fn len(&self) -> usize { self.pixels.len() }
     pub fn is_empty(&self) -> bool { self.pixels.is_empty() }
-    
-    /// 获取可变切片 - 高级用户的直接访问  
+
+    /// 获取可变切片 - 高级用户的直接访问
     pub fn as_mut_slice(&mut self) -> &mut [P] {
         &mut self.pixels
     }
@@ -708,57 +710,57 @@ impl FormatDetector {
                 format: "Data too short for format detection".to_string(),
             });
         }
-        
+
         // JPEG文件头检测
         if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
             return Ok(ImageFormat::Jpeg);
         }
-        
+
         // PNG文件头检测
         if data.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
             return Ok(ImageFormat::Png);
         }
-        
+
         // WebP文件头检测
-        if data.len() >= 12 && 
-           data[0..4] == [0x52, 0x49, 0x46, 0x46] && 
+        if data.len() >= 12 &&
+           data[0..4] == [0x52, 0x49, 0x46, 0x46] &&
            data[8..12] == [0x57, 0x45, 0x42, 0x50] {
             return Ok(ImageFormat::WebP);
         }
-        
+
         // AVIF文件头检测
-        if data.len() >= 12 && 
-           data[4..8] == [0x66, 0x74, 0x79, 0x70] && 
+        if data.len() >= 12 &&
+           data[4..8] == [0x66, 0x74, 0x79, 0x70] &&
            data[8..12] == [0x61, 0x76, 0x69, 0x66] {
             return Ok(ImageFormat::Avif);
         }
-        
+
         // BMP文件头检测
         if data.starts_with(&[0x42, 0x4D]) {
             return Ok(ImageFormat::Bmp);
         }
-        
+
         // TIFF文件头检测 (小端和大端)
-        if data.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || 
+        if data.starts_with(&[0x49, 0x49, 0x2A, 0x00]) ||
            data.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
             return Ok(ImageFormat::Tiff);
         }
-        
+
         // GIF文件头检测
         if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
             return Ok(ImageFormat::Gif);
         }
-        
+
         // ICO文件头检测
         if data.len() >= 4 && data[0..4] == [0x00, 0x00, 0x01, 0x00] {
             return Ok(ImageFormat::Ico);
         }
-        
+
         Err(ImageError::InvalidFormat {
             format: "Unknown format - no matching file signature".to_string(),
         })
     }
-    
+
     /// 从扩展名猜测格式 - 辅助方法
     pub fn guess_from_extension(extension: &str) -> Option<ImageFormat> {
         match extension.to_lowercase().as_str() {
@@ -786,37 +788,37 @@ impl CodecConfigBuilder {
             config: CodecConfig::default(),
         }
     }
-    
+
     /// 启用/禁用并行处理
     pub fn parallel(mut self, enabled: bool) -> Self {
         self.config.parallel_enabled = enabled;
         self
     }
-    
+
     /// 设置线程池大小
     pub fn thread_pool_size(mut self, size: usize) -> Self {
         self.config.thread_pool_size = Some(size);
         self
     }
-    
+
     /// 启用/禁用SIMD优化
     pub fn simd(mut self, enabled: bool) -> Self {
         self.config.simd_enabled = enabled;
         self
     }
-    
+
     /// 设置内存限制
     pub fn memory_limit(mut self, limit: u64) -> Self {
         self.config.memory_limit = Some(limit);
         self
     }
-    
+
     /// 设置质量优先级
     pub fn quality_priority(mut self, priority: QualityPriority) -> Self {
         self.config.quality_priority = priority;
         self
     }
-    
+
     /// 构建最终配置
     pub fn build(self) -> CodecConfig {
         self.config
@@ -846,6 +848,185 @@ impl Default for CodecConfig {
 // =============================================================================
 
 // 简化的存根实现宏
+// 实现JPEG编解码器
+impl JpegCodec {
+    fn new(_config: &CodecConfig) -> Result<Self> {
+        Ok(Self::default())
+    }
+}
+
+impl Codec<Rgba8> for JpegCodec {
+    fn decode(&self, data: &[u8]) -> Result<ImageBuffer<Rgba8>> {
+        let img = image::load_from_memory_with_format(data, ImageCrateFormat::Jpeg)
+            .map_err(|e| ImageError::DecodeError {
+                format: "JPEG".to_string(),
+                message: e.to_string(),
+                source: Some(Box::new(e)),
+            })?;
+
+        let rgba_img = img.to_rgba8();
+        let (width, height) = rgba_img.dimensions();
+
+        let pixels: Vec<Rgba8> = rgba_img
+            .pixels()
+            .map(|p| Rgba8 {
+                r: p.0[0],
+                g: p.0[1],
+                b: p.0[2],
+                a: p.0[3]
+            })
+            .collect();
+
+        Ok(ImageBuffer::from_raw(
+            width,
+            height,
+            pixels,
+            PixelFormat::Rgba8,
+        )?)
+    }
+
+    fn encode(&self, buffer: &ImageBuffer<Rgba8>, options: &ConversionOptions) -> Result<Vec<u8>> {
+        let mut output = Vec::new();
+        let cursor = Cursor::new(&mut output);
+
+        let quality = (options.quality().unwrap_or(0.8) * 100.0) as u8;
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(cursor, quality);
+
+        let dims = buffer.dimensions();
+        let rgba_data: Vec<u8> = buffer
+            .as_slice()
+            .iter()
+            .flat_map(|p| vec![p.r, p.g, p.b, p.a])
+            .collect();
+
+        encoder.write_image(
+            &rgba_data,
+            dims.width,
+            dims.height,
+            image::ColorType::Rgba8,
+        ).map_err(|e| ImageError::EncodeError {
+            format: "JPEG".to_string(),
+            message: e.to_string(),
+            source: Some(Box::new(e)),
+        })?;
+
+        Ok(output)
+    }
+
+    fn info(&self) -> CodecInfo {
+        CodecInfo {
+            format: ImageFormat::Jpeg,
+            name: "JPEG Codec".to_string(),
+            version: "1.0.0".to_string(),
+            supports_decode: true,
+            supports_encode: true,
+            performance_level: PerformanceLevel::Fast,
+            quality_features: QualityFeatures {
+                supports_lossless: false,
+                supports_lossy: true,
+                supports_progressive: true,
+                supports_transparency: false,
+                supports_animation: false,
+                max_quality_level: 100,
+            },
+        }
+    }
+
+    fn validate_format(&self, data: &[u8]) -> bool {
+        data.len() >= 3 && data[0..3] == [0xFF, 0xD8, 0xFF]
+    }
+}
+
+// 实现PNG编解码器
+impl PngCodec {
+    fn new(_config: &CodecConfig) -> Result<Self> {
+        Ok(Self::default())
+    }
+}
+
+impl Codec<Rgba8> for PngCodec {
+    fn decode(&self, data: &[u8]) -> Result<ImageBuffer<Rgba8>> {
+        let img = image::load_from_memory_with_format(data, ImageCrateFormat::Png)
+            .map_err(|e| ImageError::DecodeError {
+                format: "PNG".to_string(),
+                message: e.to_string(),
+                source: Some(Box::new(e)),
+            })?;
+
+        let rgba_img = img.to_rgba8();
+        let (width, height) = rgba_img.dimensions();
+
+        let pixels: Vec<Rgba8> = rgba_img
+            .pixels()
+            .map(|p| Rgba8 {
+                r: p.0[0],
+                g: p.0[1],
+                b: p.0[2],
+                a: p.0[3]
+            })
+            .collect();
+
+        Ok(ImageBuffer::from_raw(
+            width,
+            height,
+            pixels,
+            PixelFormat::Rgba8,
+        )?)
+    }
+
+    fn encode(&self, buffer: &ImageBuffer<Rgba8>, options: &ConversionOptions) -> Result<Vec<u8>> {
+        let mut output = Vec::new();
+        let cursor = Cursor::new(&mut output);
+
+        let compression_level = options.compression_level().unwrap_or(6);
+        let encoder = image::codecs::png::PngEncoder::new(cursor);
+
+        let dims = buffer.dimensions();
+        let rgba_data: Vec<u8> = buffer
+            .as_slice()
+            .iter()
+            .flat_map(|p| vec![p.r, p.g, p.b, p.a])
+            .collect();
+
+        encoder.write_image(
+            &rgba_data,
+            dims.width,
+            dims.height,
+            image::ColorType::Rgba8,
+        ).map_err(|e| ImageError::EncodeError {
+            format: "PNG".to_string(),
+            message: e.to_string(),
+            source: Some(Box::new(e)),
+        })?;
+
+        Ok(output)
+    }
+
+    fn info(&self) -> CodecInfo {
+        CodecInfo {
+            format: ImageFormat::Png,
+            name: "PNG Codec".to_string(),
+            version: "1.0.0".to_string(),
+            supports_decode: true,
+            supports_encode: true,
+            performance_level: PerformanceLevel::Balanced,
+            quality_features: QualityFeatures {
+                supports_lossless: true,
+                supports_lossy: false,
+                supports_progressive: false,
+                supports_transparency: true,
+                supports_animation: false,
+                max_quality_level: 9,
+            },
+        }
+    }
+
+    fn validate_format(&self, data: &[u8]) -> bool {
+        data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    }
+}
+
+// 为其他格式实现存根
 macro_rules! impl_codec_stub {
     ($codec:ident, $format:expr, $name:expr, $lossy:expr, $transparency:expr, $animation:expr) => {
         impl $codec {
@@ -853,20 +1034,20 @@ macro_rules! impl_codec_stub {
                 Ok(Self::default())
             }
         }
-        
+
         impl Codec<Rgba8> for $codec {
             fn decode(&self, _data: &[u8]) -> Result<ImageBuffer<Rgba8>> {
                 Err(ImageError::UnsupportedOperation {
                     operation: format!("{} decode not yet implemented", $name),
                 })
             }
-            
+
             fn encode(&self, _buffer: &ImageBuffer<Rgba8>, _options: &ConversionOptions) -> Result<Vec<u8>> {
                 Err(ImageError::UnsupportedOperation {
                     operation: format!("{} encode not yet implemented", $name),
                 })
             }
-            
+
             fn info(&self) -> CodecInfo {
                 CodecInfo {
                     format: $format,
@@ -885,7 +1066,7 @@ macro_rules! impl_codec_stub {
                     },
                 }
             }
-            
+
             fn validate_format(&self, _data: &[u8]) -> bool {
                 false // TODO: 实现具体的格式验证
             }
@@ -977,8 +1158,9 @@ impl Default for IcoCodec {
 }
 
 // 应用存根实现
-impl_codec_stub!(JpegCodec, ImageFormat::Jpeg, "JPEG", true, false, false);
-impl_codec_stub!(PngCodec, ImageFormat::Png, "PNG", false, true, false);
+// JPEG and PNG codecs are already implemented above
+// impl_codec_stub!(JpegCodec, ImageFormat::Jpeg, "JPEG", true, false, false);
+// impl_codec_stub!(PngCodec, ImageFormat::Png, "PNG", false, true, false);
 impl_codec_stub!(WebPCodec, ImageFormat::WebP, "WebP", true, true, true);
 impl_codec_stub!(AvifCodec, ImageFormat::Avif, "AVIF", true, true, true);
 impl_codec_stub!(BmpCodec, ImageFormat::Bmp, "BMP", false, false, false);

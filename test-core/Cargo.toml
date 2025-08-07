@@ -1,0 +1,13 @@
+[package]
+name = "test-core"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+rustimage-core = { path = "../rustimage-core" }
+
+[[bin]]
+name = "test-core"
+path = "src/main.rs"
