@@ -14,6 +14,9 @@ use crate::{
 };
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 // 外部依赖的简化实现

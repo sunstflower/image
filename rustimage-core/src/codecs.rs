@@ -886,29 +886,25 @@ impl Codec<Rgba8> for JpegCodec {
     }
 
     fn encode(&self, buffer: &ImageBuffer<Rgba8>, options: &ConversionOptions) -> Result<Vec<u8>> {
-        let mut output = Vec::new();
-        let cursor = Cursor::new(&mut output);
-
-        let quality = (options.quality().unwrap_or(0.8) * 100.0) as u8;
-        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(cursor, quality);
-
+        // JPEG 不支持 Alpha 通道，需转为 RGB
         let dims = buffer.dimensions();
-        let rgba_data: Vec<u8> = buffer
+        let rgb_data: Vec<u8> = buffer
             .as_slice()
             .iter()
-            .flat_map(|p| vec![p.r, p.g, p.b, p.a])
+            .flat_map(|p| [p.r, p.g, p.b])
             .collect();
 
-        encoder.write_image(
-            &rgba_data,
-            dims.width,
-            dims.height,
-            image::ColorType::Rgba8,
-        ).map_err(|e| ImageError::EncodeError {
-            format: "JPEG".to_string(),
-            message: e.to_string(),
-            source: Some(Box::new(e)),
-        })?;
+        let mut output = Vec::new();
+        let quality = (options.quality().unwrap_or(0.8) * 100.0) as u8;
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, quality);
+
+        encoder
+            .write_image(&rgb_data, dims.width, dims.height, image::ColorType::Rgb8)
+            .map_err(|e| ImageError::EncodeError {
+                format: "JPEG".to_string(),
+                message: e.to_string(),
+                source: Some(Box::new(e)),
+            })?;
 
         Ok(output)
     }
@@ -974,30 +970,24 @@ impl Codec<Rgba8> for PngCodec {
         )?)
     }
 
-    fn encode(&self, buffer: &ImageBuffer<Rgba8>, options: &ConversionOptions) -> Result<Vec<u8>> {
-        let mut output = Vec::new();
-        let cursor = Cursor::new(&mut output);
-
-        let compression_level = options.compression_level().unwrap_or(6);
-        let encoder = image::codecs::png::PngEncoder::new(cursor);
-
+    fn encode(&self, buffer: &ImageBuffer<Rgba8>, _options: &ConversionOptions) -> Result<Vec<u8>> {
         let dims = buffer.dimensions();
         let rgba_data: Vec<u8> = buffer
             .as_slice()
             .iter()
-            .flat_map(|p| vec![p.r, p.g, p.b, p.a])
+            .flat_map(|p| [p.r, p.g, p.b, p.a])
             .collect();
 
-        encoder.write_image(
-            &rgba_data,
-            dims.width,
-            dims.height,
-            image::ColorType::Rgba8,
-        ).map_err(|e| ImageError::EncodeError {
-            format: "PNG".to_string(),
-            message: e.to_string(),
-            source: Some(Box::new(e)),
-        })?;
+        let mut output = Vec::new();
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut output);
+
+        encoder
+            .write_image(&rgba_data, dims.width, dims.height, image::ColorType::Rgba8)
+            .map_err(|e| ImageError::EncodeError {
+                format: "PNG".to_string(),
+                message: e.to_string(),
+                source: Some(Box::new(e)),
+            })?;
 
         Ok(output)
     }

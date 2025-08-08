@@ -11,7 +11,11 @@ use crate::{
     types::*,
 };
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 use std::sync::{Arc, Mutex, RwLock};
 
 // =============================================================================

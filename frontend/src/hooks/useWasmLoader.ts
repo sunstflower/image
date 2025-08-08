@@ -1,8 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 // 通过 index.html 的 <script type="module"> 注入 window.rustimage_wasm
 
-type WasmModule = any
-
 export function useWasmLoader() {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)

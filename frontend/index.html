@@ -9,15 +9,23 @@
   <body>
     <div id="root"></div>
     <script type="module">
-      import init, * as mod from '/pkg/rustimage_wasm.js'
-      try {
-        await init('/pkg/rustimage_wasm_bg.wasm')
-        window.rustimage_wasm = mod
-        window.dispatchEvent(new Event('rustimage-wasm-ready'))
-        console.info('[WASM] initialized')
-      } catch (e) {
-        console.error('[WASM] init failed', e)
-      }
+      (async () => {
+        try {
+          // 直接获取模块源码，生成 blob URL，绕过 Vite 对 /public 的 import 分析
+          const jsResp = await fetch('/pkg/rustimage_wasm.js')
+          const jsCode = await jsResp.text()
+          const blobUrl = URL.createObjectURL(new Blob([jsCode], { type: 'text/javascript' }))
+
+          const mod = await import(blobUrl)
+          await mod.default('/pkg/rustimage_wasm_bg.wasm')
+
+          window.rustimage_wasm = mod
+          window.dispatchEvent(new Event('rustimage-wasm-ready'))
+          console.info('[WASM] initialized')
+        } catch (e) {
+          console.error('[WASM] init failed', e)
+        }
+      })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
