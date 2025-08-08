@@ -9,7 +9,8 @@ image = { workspace = true }
 rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.6", features = ["v4", "js"] }
+wasm-bindgen = { workspace = true, optional = true }
 
 [lib]
 name = "rustimage_core"
@@ -22,3 +23,4 @@ default = ["parallel"]
 bench = []
 simd = []
 parallel = ["rayon"]
+wasm = ["dep:wasm-bindgen"]

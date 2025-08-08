@@ -513,7 +513,7 @@ impl CodecEngine {
 
         Ok(())
     }
-
+    
     /// 验证编码参数 - 私有方法
     fn validate_encode_params(&self, format: ImageFormat, options: &ConversionOptions) -> Result<()> {
         let info = format.info();

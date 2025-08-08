@@ -8,6 +8,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script type="module">
+      import init, * as mod from '/pkg/rustimage_wasm.js'
+      try {
+        await init('/pkg/rustimage_wasm_bg.wasm')
+        window.rustimage_wasm = mod
+        window.dispatchEvent(new Event('rustimage-wasm-ready'))
+        console.info('[WASM] initialized')
+      } catch (e) {
+        console.error('[WASM] init failed', e)
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

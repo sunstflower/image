@@ -709,8 +709,8 @@ impl From<std::fmt::Error> for ImageError {
     }
 }
 
-// 为WASM绑定提供的简化错误类型
-#[cfg(target_arch = "wasm32")]
+// 为WASM绑定提供的简化错误类型（仅在启用 wasm feature 时）
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 impl From<ImageError> for wasm_bindgen::JsValue {
     fn from(err: ImageError) -> Self {
         wasm_bindgen::JsValue::from_str(&err.to_string())
