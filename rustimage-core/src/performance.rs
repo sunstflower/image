@@ -48,32 +48,88 @@ pub struct PerformanceSnapshot {
 impl PerformanceMonitor {
     /// 创建新的性能监控器
     pub fn new(config: MonitorConfig) -> Self {
-        todo!("Implementation will be added later")
+        let metrics = PerformanceMetrics {
+            total_time_ms: 0.0,
+            peak_memory_bytes: 0,
+            cpu_usage: 0.0,
+            images_processed: 0,
+            images_per_second: 0.0,
+            total_data_bytes: 0,
+            throughput_mbps: 0.0,
+            thread_info: ThreadMetrics {
+                threads_used: 1,
+                parallel_efficiency: 1.0,
+                simd_utilized: false,
+            },
+        };
+        Self {
+            current_metrics: Arc::new(Mutex::new(metrics)),
+            history: Vec::new(),
+            config,
+            session_start: Instant::now(),
+        }
     }
     
     /// 开始性能测量
     pub fn start_measurement(&mut self, operation: &str) -> MeasurementHandle {
-        todo!("Implementation will be added later")
+        MeasurementHandle::new(operation.to_string())
     }
     
     /// 结束性能测量
     pub fn end_measurement(&mut self, handle: MeasurementHandle) -> Result<Duration> {
-        todo!("Implementation will be added later")
+        let duration = handle.complete();
+        let mut guard = self.current_metrics.lock().map_err(|_| ImageError::PerformanceError { details: "Mutex poisoned".to_string() })?;
+        guard.total_time_ms += duration.as_secs_f64() * 1000.0;
+        // 生成快照
+        let snapshot = PerformanceSnapshot {
+            timestamp: Instant::now(),
+            metrics: guard.clone(),
+            operation: "convert".to_string(),
+        };
+        self.history.push(snapshot);
+        if self.history.len() > self.config.max_history_entries {
+            let overflow = self.history.len() - self.config.max_history_entries;
+            self.history.drain(0..overflow);
+        }
+        Ok(duration)
     }
     
     /// 记录内存使用
     pub fn record_memory_usage(&mut self, bytes: u64) {
-        todo!("Implementation will be added later")
+        if let Ok(mut guard) = self.current_metrics.lock() {
+            if bytes > guard.peak_memory_bytes {
+                guard.peak_memory_bytes = bytes;
+            }
+        }
     }
     
     /// 记录像素处理数量
     pub fn record_pixels_processed(&mut self, count: u64) {
-        todo!("Implementation will be added later")
+        if let Ok(mut guard) = self.current_metrics.lock() {
+            guard.images_processed = guard.images_processed.saturating_add(1);
+            // 粗略估计：像素数映射到数据量（RGBA8）
+            let bytes = count.saturating_mul(4);
+            guard.total_data_bytes = guard.total_data_bytes.saturating_add(bytes);
+            let elapsed = self.session_start.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                guard.images_per_second = guard.images_processed as f64 / elapsed;
+                guard.throughput_mbps = guard.total_data_bytes as f64 / 1_000_000.0 / elapsed;
+            }
+        }
     }
     
     /// 获取当前指标
     pub fn get_current_metrics(&self) -> PerformanceMetrics {
-        todo!("Implementation will be added later")
+        self.current_metrics.lock().map(|g| g.clone()).unwrap_or_else(|_| PerformanceMetrics {
+            total_time_ms: 0.0,
+            peak_memory_bytes: 0,
+            cpu_usage: 0.0,
+            images_processed: 0,
+            images_per_second: 0.0,
+            total_data_bytes: 0,
+            throughput_mbps: 0.0,
+            thread_info: ThreadMetrics { threads_used: 1, parallel_efficiency: 1.0, simd_utilized: false },
+        })
     }
     
     /// 获取历史数据
@@ -83,12 +139,40 @@ impl PerformanceMonitor {
     
     /// 重置监控数据
     pub fn reset(&mut self) {
-        todo!("Implementation will be added later")
+        if let Ok(mut guard) = self.current_metrics.lock() {
+            *guard = PerformanceMetrics {
+                total_time_ms: 0.0,
+                peak_memory_bytes: 0,
+                cpu_usage: 0.0,
+                images_processed: 0,
+                images_per_second: 0.0,
+                total_data_bytes: 0,
+                throughput_mbps: 0.0,
+                thread_info: ThreadMetrics { threads_used: 1, parallel_efficiency: 1.0, simd_utilized: false },
+            };
+        }
+        self.history.clear();
+        self.session_start = Instant::now();
     }
     
     /// 生成性能报告
     pub fn generate_report(&self) -> PerformanceReport {
-        todo!("Implementation will be added later")
+        let metrics = self.get_current_metrics();
+        let total_time = Duration::from_secs_f64(metrics.total_time_ms / 1000.0);
+        let summary = PerformanceSummary {
+            total_processing_time: total_time,
+            average_processing_time: if self.history.is_empty() { Duration::ZERO } else { total_time / (self.history.len() as u32) },
+            fastest_processing_time: self.history.iter().map(|s| Duration::from_secs_f64(s.metrics.total_time_ms / 1000.0)).min().unwrap_or(Duration::ZERO),
+            slowest_processing_time: self.history.iter().map(|s| Duration::from_secs_f64(s.metrics.total_time_ms / 1000.0)).max().unwrap_or(Duration::ZERO),
+            total_pixels_processed: metrics.total_data_bytes / 4,
+            average_pixels_per_second: metrics.images_per_second * 1.0, // 近似
+        };
+        PerformanceReport {
+            summary,
+            operation_details: Vec::new(),
+            trends: TrendAnalysis { performance_trend: 0.0, memory_trend: 0.0, stability_score: 1.0 },
+            recommendations: Vec::new(),
+        }
     }
 }
 

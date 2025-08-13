@@ -25,7 +25,8 @@ pub fn convert_format(  // 格式转换接口
     to_format: ImageFormat,   // 目标格式
     options: Option<ConversionOptions>, // 转换选项
 ) -> Result<ConvertedImage> {
-    todo!("Implementation will be added later") // 实现将添加到以后
+    let mut converter = FormatConverter::with_defaults()?;
+    converter.convert_format(image_data, from_format, to_format, options)
 }
 
 /// 批量格式转换接口 - 展示并行处理能力
@@ -33,20 +34,24 @@ pub fn batch_convert(
     images: Vec<ImageInput>, // 图像输入
     conversion_tasks: Vec<ConversionTask>, // 转换任务
 ) -> Result<Vec<ConvertedImage>> {
-    todo!("Implementation will be added later")
+    let mut converter = FormatConverter::with_defaults()?;
+    converter.batch_convert(images, conversion_tasks)
 }
 
 /// 格式检测接口 - 自动识别图像格式
 pub fn detect_format(image_data: &[u8]) -> Result<ImageFormat> {
-    todo!("Implementation will be added later")
+    let converter = FormatConverter::with_defaults()?;
+    converter.detect_format(image_data)
 }
 
 /// 获取格式信息 - 了解格式特性
 pub fn get_format_info(format: ImageFormat) -> FormatInfo {
-    todo!("Implementation will be added later")
+    let converter = FormatConverter::with_defaults().expect("init converter");
+    converter.get_format_info(format)
 }
 
 /// 获取性能指标 - 用于展示 Rust 性能优势
 pub fn get_performance_metrics() -> PerformanceMetrics {
-    todo!("Implementation will be added later")
+    let converter = FormatConverter::with_defaults().expect("init converter");
+    converter.get_performance_metrics()
 }

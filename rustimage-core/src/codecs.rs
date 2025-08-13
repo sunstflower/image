@@ -3,9 +3,11 @@
 use crate::{
     error::{ImageError, Result},
     types::*,
-    converter::ImageBuffer,
+    converter::{ImageBuffer, PixelFormat},
 };
 use rayon::prelude::*;
+use image::{DynamicImage, ImageFormat as ImgFmt, ImageBuffer as ImgBuffer, Rgba as ImgRgba};
+use std::io::Cursor;
 
 /// 编解码引擎 - 管理所有格式的编解码器
 pub struct CodecEngine {
@@ -30,7 +32,16 @@ pub struct CodecEngine {
 impl CodecEngine {
     /// 创建新的编解码引擎
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
+        Self {
+            jpeg_codec: JpegCodec::new(),
+            png_codec: PngCodec::new(),
+            webp_codec: WebPCodec::new(),
+            avif_codec: AvifCodec::new(),
+            bmp_codec: BmpCodec::new(),
+            tiff_codec: TiffCodec::new(),
+            gif_codec: GifCodec::new(),
+            ico_codec: IcoCodec::new(),
+        }
     }
     
     /// 解码图像数据
@@ -39,7 +50,30 @@ impl CodecEngine {
         data: &[u8],
         format: ImageFormat,
     ) -> Result<ImageBuffer<P>> {
-        todo!("Implementation will be added later")
+        let dyn_img = decode_with_image_crate(data, format)?;
+        // 统一转换为 RGBA8，然后再映射到 P
+        let rgba = dyn_img.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        let mut out: Vec<P> = Vec::with_capacity((w as usize) * (h as usize));
+        for px in rgba.pixels() {
+            let channels = [px[0], px[1], px[2], px[3]];
+            let p: P = if P::CHANNEL_COUNT == 4 {
+                P::from_channels(&[channels[0], channels[1], channels[2], channels[3]])
+            } else if P::CHANNEL_COUNT == 3 {
+                P::from_channels(&[channels[0], channels[1], channels[2]])
+            } else {
+                let y = (0.299f32 * channels[0] as f32 + 0.587f32 * channels[1] as f32 + 0.114f32 * channels[2] as f32).round() as u8;
+                P::from_channels(&[y])
+            };
+            out.push(p);
+        }
+        let pf = match P::CHANNEL_COUNT {
+            4 => PixelFormat::Rgba8,
+            3 => PixelFormat::Rgb8,
+            1 => PixelFormat::Gray8,
+            _ => PixelFormat::Rgba8,
+        };
+        ImageBuffer::from_raw(w, h, out, pf)
     }
     
     /// 编码图像数据
@@ -49,12 +83,51 @@ impl CodecEngine {
         format: ImageFormat,
         options: &ConversionOptions,
     ) -> Result<Vec<u8>> {
-        todo!("Implementation will be added later")
+        // 将缓冲区归一化到 RGBA8 再交给 image crate 编码
+        let dims = buffer.dimensions();
+        let width = dims.width;
+        let height = dims.height;
+        let mut flat: Vec<u8> = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        for p in buffer.as_slice() {
+            let ch = p.to_channels();
+            match P::CHANNEL_COUNT {
+                4 => {
+                    flat.extend_from_slice(&[ch[0], ch[1], ch[2], ch[3]]);
+                }
+                3 => {
+                    flat.extend_from_slice(&[ch[0], ch[1], ch[2], 255]);
+                }
+                1 => {
+                    let y = ch[0];
+                    flat.extend_from_slice(&[y, y, y, 255]);
+                }
+                _ => return Err(ImageError::InvalidParameters { details: "Unsupported channel count".into() }),
+            }
+        }
+        let img: ImgBuffer<ImgRgba<u8>, _> = ImgBuffer::from_vec(width, height, flat)
+            .ok_or_else(|| ImageError::ProcessingFailed { reason: "Invalid buffer size".into() })?;
+        let dyn_img = DynamicImage::ImageRgba8(img);
+        encode_with_image_crate(&dyn_img, format, options)
     }
     
     /// 获取编解码器信息
     pub fn get_codec_info(format: ImageFormat) -> CodecInfo {
-        todo!("Implementation will be added later")
+        CodecInfo {
+            format,
+            name: format!("{:?}", format),
+            version: "image-crate-backend".into(),
+            supports_decode: true,
+            supports_encode: true,
+            performance_level: PerformanceLevel::Balanced,
+            quality_features: QualityFeatures {
+                supports_lossless: matches!(format, ImageFormat::Png | ImageFormat::WebP | ImageFormat::Avif | ImageFormat::Bmp | ImageFormat::Tiff),
+                supports_lossy: matches!(format, ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Avif),
+                supports_progressive: matches!(format, ImageFormat::Jpeg),
+                supports_transparency: format.supports_transparency(),
+                supports_animation: format.supports_animation(),
+                max_quality_level: 100,
+            },
+        }
     }
 }
 
@@ -127,17 +200,7 @@ pub struct JpegCodec {
 
 impl JpegCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 生成质量表
-    fn generate_quality_table(quality: f32) -> Vec<u8> {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 优化的 DCT 变换
-    fn optimized_dct(&self, block: &mut [f32]) {
-        todo!("Implementation will be added later")
+        Self { quality_table: None, optimization_level: 0 }
     }
 }
 
@@ -172,17 +235,7 @@ pub enum CompressionStrategy {
 
 impl PngCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 自适应滤波器选择
-    fn select_best_filter(&self, scanline: &[u8], previous: Option<&[u8]>) -> PngFilter {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 优化的 zlib 压缩
-    fn compress_with_zlib(&self, data: &[u8], level: u8) -> Result<Vec<u8>> {
-        todo!("Implementation will be added later")
+        Self { compression_strategy: CompressionStrategy::Default, filter_type: PngFilter::Adaptive }
     }
 }
 
@@ -212,12 +265,7 @@ pub struct WebPPreprocessing {
 
 impl WebPCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 智能模式选择
-    fn auto_select_mode(&self, buffer: &ImageBuffer<impl Pixel>) -> WebPMode {
-        todo!("Implementation will be added later")
+        Self { encoding_mode: WebPMode::Mixed, preprocessing: WebPPreprocessing { sharp_yuv: true, auto_filter: true, alpha_compression: true } }
     }
 }
 
@@ -246,12 +294,7 @@ pub enum TilingMode {
 
 impl AvifCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 优化分块策略
-    fn optimize_tiling(&self, dimensions: ImageDimensions) -> TilingMode {
-        todo!("Implementation will be added later")
+        Self { encoder_settings: AvifEncoderSettings { speed: 6, quality: 80, quality_alpha: 80, tiling: TilingMode::Auto } }
     }
 }
 
@@ -263,7 +306,7 @@ pub struct BmpCodec {
 
 impl BmpCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
+        Self { support_compression: false }
     }
 }
 
@@ -285,7 +328,7 @@ pub enum TiffCompression {
 
 impl TiffCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
+        Self { compression_type: TiffCompression::None }
     }
 }
 
@@ -299,12 +342,7 @@ pub struct GifCodec {
 
 impl GifCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 优化调色板
-    fn optimize_palette(&self, buffer: &ImageBuffer<impl Pixel>) -> Vec<[u8; 3]> {
-        todo!("Implementation will be added later")
+        Self { animation_support: true, palette_optimization: true }
     }
 }
 
@@ -316,12 +354,7 @@ pub struct IcoCodec {
 
 impl IcoCodec {
     pub fn new() -> Self {
-        todo!("Implementation will be added later")
-    }
-    
-    /// 生成多尺寸图标
-    fn generate_multi_size_icon(&self, buffer: &ImageBuffer<impl Pixel>) -> Result<Vec<u8>> {
-        todo!("Implementation will be added later")
+        Self { supported_sizes: vec![16, 24, 32, 48, 64, 128, 256] }
     }
 }
 
@@ -330,8 +363,8 @@ pub struct CodecFactory;
 
 impl CodecFactory {
     /// 创建编解码器
-    pub fn create_codec(format: ImageFormat) -> Result<Box<dyn Codec<Rgba<u8>>>> {
-        todo!("Implementation will be added later")
+    pub fn create_codec(_format: ImageFormat) -> Result<Box<dyn Codec<Rgba<u8>>>> {
+        Err(ImageError::UnsupportedOperation { operation: "create_codec not implemented".into() })
     }
     
     /// 获取所有支持的格式
@@ -351,5 +384,34 @@ impl CodecFactory {
     /// 检查格式是否支持
     pub fn is_format_supported(format: ImageFormat) -> bool {
         Self::supported_formats().contains(&format)
+    }
+}
+
+// 使用 image crate 解码
+fn decode_with_image_crate(data: &[u8], format: ImageFormat) -> Result<DynamicImage> {
+    let img_format = to_image_crate_format(format).ok_or_else(|| ImageError::InvalidFormat { format: format!("{:?}", format) })?;
+    let reader = image::io::Reader::with_format(Cursor::new(data), img_format);
+    let dyn_img = reader.decode().map_err(|e| ImageError::DecodeError { message: e.to_string() })?;
+    Ok(dyn_img)
+}
+
+// 使用 image crate 编码
+fn encode_with_image_crate(img: &DynamicImage, format: ImageFormat, _options: &ConversionOptions) -> Result<Vec<u8>> {
+    let mut cursor = Cursor::new(Vec::new());
+    let fmt = to_image_crate_format(format).ok_or_else(|| ImageError::InvalidFormat { format: format!("{:?}", format) })?;
+    img.write_to(&mut cursor, fmt).map_err(|e| ImageError::EncodeError { message: e.to_string() })?;
+    Ok(cursor.into_inner())
+}
+
+fn to_image_crate_format(format: ImageFormat) -> Option<ImgFmt> {
+    match format {
+        ImageFormat::Jpeg => Some(ImgFmt::Jpeg),
+        ImageFormat::Png => Some(ImgFmt::Png),
+        ImageFormat::WebP => Some(ImgFmt::WebP),
+        ImageFormat::Avif => Some(ImgFmt::Avif),
+        ImageFormat::Bmp => Some(ImgFmt::Bmp),
+        ImageFormat::Tiff => Some(ImgFmt::Tiff),
+        ImageFormat::Gif => Some(ImgFmt::Gif),
+        ImageFormat::Ico => Some(ImgFmt::Ico),
     }
 }

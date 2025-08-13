@@ -258,3 +258,51 @@ impl ImageFormat {
         matches!(self, ImageFormat::Gif | ImageFormat::WebP | ImageFormat::Avif)
     }
 }
+
+// Pixel 实现（u8 通道）
+impl Pixel for Rgb<u8> {
+    type Subpixel = u8;
+    const CHANNEL_COUNT: u8 = 3;
+
+    fn from_channels(channels: &[Self::Subpixel]) -> Self {
+        let r = *channels.get(0).unwrap_or(&0);
+        let g = *channels.get(1).unwrap_or(&0);
+        let b = *channels.get(2).unwrap_or(&0);
+        Self { data: [r, g, b] }
+    }
+
+    fn to_channels(&self) -> Vec<Self::Subpixel> {
+        vec![self.data[0], self.data[1], self.data[2]]
+    }
+}
+
+impl Pixel for Rgba<u8> {
+    type Subpixel = u8;
+    const CHANNEL_COUNT: u8 = 4;
+
+    fn from_channels(channels: &[Self::Subpixel]) -> Self {
+        let r = *channels.get(0).unwrap_or(&0);
+        let g = *channels.get(1).unwrap_or(&0);
+        let b = *channels.get(2).unwrap_or(&0);
+        let a = *channels.get(3).unwrap_or(&255);
+        Self { data: [r, g, b, a] }
+    }
+
+    fn to_channels(&self) -> Vec<Self::Subpixel> {
+        vec![self.data[0], self.data[1], self.data[2], self.data[3]]
+    }
+}
+
+impl Pixel for Luma<u8> {
+    type Subpixel = u8;
+    const CHANNEL_COUNT: u8 = 1;
+
+    fn from_channels(channels: &[Self::Subpixel]) -> Self {
+        let y = *channels.get(0).unwrap_or(&0);
+        Self { data: [y] }
+    }
+
+    fn to_channels(&self) -> Vec<Self::Subpixel> {
+        vec![self.data[0]]
+    }
+}
